@@ -51,4 +51,12 @@ control = "/run/kiki/agentd-control.sock"
 [fleet]
 enabled            = true
 cloud_url          = ""   # set by fleet provisioning
+auth_url           = ""   # derived from cloud_url (fleet.→auth.) when empty
+flavor             = "headless"
 heartbeat_interval = 30
+
+[apps]
+# Built-in app artifacts baked into the immutable image. agentd scans this
+# directory on boot and spawns each app that declares an [exec] block.
+# User-installed apps land under /var/kiki/apps (mutable, machine-local).
+dir = "/usr/libexec/kiki/apps"

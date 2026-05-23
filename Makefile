@@ -1,53 +1,78 @@
-VERSION ?= $(shell git describe --tags --always --dirty)
+# Kiki OS image builds.
+#
+# The image build compiles agentd + the built-in apps from the sibling repos
+# (kiki-agent, kiki-sdk, kiki-builtin), so the build CONTEXT is the workspace
+# parent directory (..), with a .containerignore there keeping it lean. Run
+# `make` from this directory (kiki-os/).
+#
+# Headless targets (base/server/lite) are the supported path today. `desktop`
+# additionally needs the Wayland compositor (kiki-wm) and OOBE, which are not
+# built yet — it is kept for reference but excluded from `all`.
+
+VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 REGISTRY ?= ghcr.io/kiki-os
+CONTEXT  := ..
+PLATFORM ?= linux/arm64
 
-.PHONY: all build-base build-desktop build-server build-lite iso qcow2 ami clean
+.PHONY: all headless build-base build-server build-lite build-desktop \
+        qcow2 run-vm clean
 
-all: build-desktop build-server build-lite
+# Default: the headless image set.
+all: headless
+headless: build-server build-lite
 
 build-base:
-	podman build -f Containerfile.base \
+	podman build --platform $(PLATFORM) -f Containerfile.base \
 		-t $(REGISTRY)/kiki-os-base:$(VERSION) \
-		-t $(REGISTRY)/kiki-os-base:latest .
-
-build-desktop: build-base
-	podman build -f Containerfile.desktop \
-		-t $(REGISTRY)/kiki-os-desktop:$(VERSION) \
-		-t $(REGISTRY)/kiki-os-desktop:latest .
+		-t $(REGISTRY)/kiki-os-base:latest \
+		-t kiki-base:latest \
+		$(CONTEXT)
 
 build-server: build-base
-	podman build -f Containerfile.server \
+	podman build --platform $(PLATFORM) -f Containerfile.server \
 		-t $(REGISTRY)/kiki-os-server:$(VERSION) \
-		-t $(REGISTRY)/kiki-os-server:latest .
+		-t $(REGISTRY)/kiki-os-server:latest \
+		-t kiki-server:latest \
+		$(CONTEXT)
 
 build-lite: build-base
-	podman build --platform linux/arm64 -f Containerfile.lite \
+	podman build --platform $(PLATFORM) -f Containerfile.lite \
 		-t $(REGISTRY)/kiki-os-lite:$(VERSION) \
-		-t $(REGISTRY)/kiki-os-lite:latest .
+		-t $(REGISTRY)/kiki-os-lite:latest \
+		-t kiki-lite:latest \
+		$(CONTEXT)
 
-iso: build-desktop
-	image-builder build \
-		--image-ref $(REGISTRY)/kiki-os-desktop:$(VERSION) \
-		--output-dir dist/ \
-		--type iso
+# Requires the compositor (kiki-wm) + OOBE images — not built yet.
+build-desktop: build-base
+	podman build --platform $(PLATFORM) -f Containerfile.desktop \
+		-t $(REGISTRY)/kiki-os-desktop:$(VERSION) \
+		-t $(REGISTRY)/kiki-os-desktop:latest \
+		$(CONTEXT)
+
+# ── Bootable disk + VM ───────────────────────────────────────────────────────
+#
+# bootc-image-builder turns the OCI image into a bootable qcow2. It runs
+# privileged and writes to ./dist. IMAGE selects which image to convert.
+IMAGE ?= kiki-server:latest
 
 qcow2: build-server
-	image-builder build \
-		--image-ref $(REGISTRY)/kiki-os-server:$(VERSION) \
-		--output-dir dist/ \
-		--type qcow2
+	mkdir -p dist
+	podman run --rm -it --privileged \
+		--security-opt label=type:unconfined_t \
+		-v ./dist:/output \
+		-v /var/lib/containers/storage:/var/lib/containers/storage \
+		quay.io/centos-bootc/bootc-image-builder:latest \
+		build --type qcow2 --local $(IMAGE)
 
-ami: build-server
-	image-builder build \
-		--image-ref $(REGISTRY)/kiki-os-server:$(VERSION) \
-		--output-dir dist/ \
-		--type ami
-
-dev-vm: iso
-	qemu-system-x86_64 \
-		-enable-kvm -m 4G -smp 2 \
-		-cdrom dist/kiki-os-desktop-$(VERSION).iso \
-		-boot d
+# Boot the produced qcow2 in QEMU (Apple Silicon: aarch64 + HVF accel).
+run-vm:
+	qemu-system-aarch64 \
+		-machine virt,accel=hvf -cpu host -smp 2 -m 4G \
+		-bios /opt/homebrew/share/qemu/edk2-aarch64-code.fd \
+		-drive file=dist/qcow2/disk.qcow2,if=virtio,format=qcow2 \
+		-netdev user,id=net0,hostfwd=tcp::2222-:22 \
+		-device virtio-net-pci,netdev=net0 \
+		-nographic
 
 clean:
 	rm -rf dist/

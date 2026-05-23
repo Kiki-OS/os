@@ -34,4 +34,10 @@ control = "/run/kiki/agentd-control.sock"
 [fleet]
 enabled            = true
 cloud_url          = ""
+auth_url           = ""
+flavor             = "lite"
 heartbeat_interval = 60
+
+[apps]
+# Built-in apps baked into the immutable image (see Containerfile.base).
+dir = "/usr/libexec/kiki/apps"

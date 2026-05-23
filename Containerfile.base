@@ -1,24 +1,62 @@
-FROM fedora-bootc:42
+# syntax=docker/dockerfile:1
+#
+# Kiki OS — base image (headless substrate).
+#
+# Multi-stage: stage 1 compiles agentd + the built-in apps from source; stage 2
+# assembles them onto fedora-bootc. The build context root is the kiki workspace
+# parent directory (the dir containing kiki-os/, kiki-agent/, kiki-sdk/,
+# kiki-builtin/), so the Containerfile can COPY the sibling repos:
+#
+#   podman build -f kiki-os/Containerfile.base -t kiki-base:latest .
+#
+# (run from /…/work/kiki). See Makefile `build-base`.
+
+# ── Stage 1: build the Rust daemon + built-in apps ───────────────────────────
+FROM docker.io/library/rust:1.86-slim-bookworm AS builder
+
+# native-tls (fleet WebSocket) links OpenSSL; pkg-config + libssl-dev provide it.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        pkg-config libssl-dev ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY kiki-agent   ./kiki-agent
+COPY kiki-sdk     ./kiki-sdk
+COPY kiki-builtin ./kiki-builtin
+
+# The OS daemon.
+RUN cargo build --release --manifest-path kiki-agent/Cargo.toml -p agentd
+
+# Built-in apps (headless MCP tool servers).
+RUN cargo build --release --manifest-path kiki-builtin/Cargo.toml -p kiki-calc
+
+# ── Stage 2: assemble the bootc OS image ─────────────────────────────────────
+FROM quay.io/fedora/fedora-bootc:42
 
 LABEL org.opencontainers.image.title="kiki-os-base"
-LABEL org.opencontainers.image.source="https://github.com/kiki-os/kiki-os"
+LABEL org.opencontainers.image.source="https://github.com/Kiki-OS/os"
 
 # Default local model — override at build time:
 #   podman build --build-arg DEFAULT_MODEL=llama3.2:3b ...
 ARG DEFAULT_MODEL=granite4.1:3b
 
-# Core daemon
-COPY --from=ghcr.io/kiki-os/agentd:latest /usr/bin/agentd /usr/bin/agentd
+# Core daemon.
+COPY --from=builder /src/kiki-agent/target/release/agentd /usr/bin/agentd
 
-# Systemd units
-COPY rootfs/base/etc/systemd/system/agentd.service \
-     /etc/systemd/system/agentd.service
+# Systemd unit + agentd config (substitute the build-arg model into the template).
+COPY kiki-os/rootfs/base/etc/systemd/system/agentd.service /etc/systemd/system/agentd.service
+COPY kiki-os/rootfs/base/etc/kiki/agentd.toml /etc/kiki/agentd.toml
+RUN sed -i "s|@@DEFAULT_MODEL@@|${DEFAULT_MODEL}|g" /etc/kiki/agentd.toml \
+ && systemctl enable agentd.service
 
-RUN systemctl enable agentd.service
+# Built-in app artifacts live under immutable /usr (bootc resets /var per
+# machine, so /var/kiki/apps can't carry image content). agentd's loader scans
+# this dir on boot and spawns each app (see [apps] dir in agentd.toml).
+COPY --from=builder /src/kiki-builtin/target/release/kiki-calc \
+     /usr/libexec/kiki/apps/io.kiki.calc/kiki-calc
+COPY kiki-builtin/crates/kiki-calc/kiki.toml \
+     /usr/libexec/kiki/apps/io.kiki.calc/kiki.toml
 
-# agentd config — substitute build-arg into the template
-COPY rootfs/base/etc/kiki/agentd.toml /etc/kiki/agentd.toml
-RUN sed -i "s|@@DEFAULT_MODEL@@|${DEFAULT_MODEL}|g" /etc/kiki/agentd.toml
-
-# OSTree state directories
-RUN mkdir -p /var/kiki/{store,state,config,apps,components}
+# Machine-local state roots (created on first boot under the mutable /var).
+RUN mkdir -p /var/kiki/store /var/kiki/state /var/kiki/config \
+             /var/kiki/apps /var/kiki/components /var/lib/kiki/models

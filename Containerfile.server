@@ -1,15 +1,24 @@
+# syntax=docker/dockerfile:1
+#
+# Kiki OS — server image (headless VPS/cloud node).
+#
+# Builds on the base substrate. The fleet client is part of agentd itself
+# (it enrolls, registers, heartbeats, and holds the SessionDO relay), so there
+# is no separate fleet binary — the server image only adds cloud provisioning.
+#
+#   podman build -f kiki-os/Containerfile.server -t kiki-server:latest .
+#
+# (run from the workspace parent; requires kiki-base:latest built first).
+
 FROM kiki-base:latest
 
 LABEL org.opencontainers.image.title="kiki-os-server"
 
-# Fleet client (phone-home to cloud control plane)
-COPY --from=ghcr.io/kiki-os/kiki-fleet:latest \
-     /usr/bin/kiki-fleet /usr/bin/kiki-fleet
-
-COPY rootfs/server/etc/systemd/system/ /etc/systemd/system/
-
-RUN systemctl enable kiki-fleet.service
-
-# cloud-init for VPS provisioning (SSH keys, user-data token)
+# cloud-init for VPS provisioning (SSH keys, user-data → fleet cloud_url/token).
 RUN dnf install -y cloud-init --setopt=install_weak_deps=False \
- && dnf clean all
+ && dnf clean all \
+ && systemctl enable cloud-init.service
+
+# Server-role systemd drop-ins (provisioning writes the fleet endpoint +
+# enrollment token here; the base agentd.service already runs the daemon).
+COPY kiki-os/rootfs/server/etc/systemd/system/ /etc/systemd/system/
