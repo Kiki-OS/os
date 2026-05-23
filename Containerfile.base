@@ -1,0 +1,24 @@
+FROM fedora-bootc:42
+
+LABEL org.opencontainers.image.title="kiki-os-base"
+LABEL org.opencontainers.image.source="https://github.com/kiki-os/kiki-os"
+
+# Default local model — override at build time:
+#   podman build --build-arg DEFAULT_MODEL=llama3.2:3b ...
+ARG DEFAULT_MODEL=granite4.1:3b
+
+# Core daemon
+COPY --from=ghcr.io/kiki-os/agentd:latest /usr/bin/agentd /usr/bin/agentd
+
+# Systemd units
+COPY rootfs/base/etc/systemd/system/agentd.service \
+     /etc/systemd/system/agentd.service
+
+RUN systemctl enable agentd.service
+
+# agentd config — substitute build-arg into the template
+COPY rootfs/base/etc/kiki/agentd.toml /etc/kiki/agentd.toml
+RUN sed -i "s|@@DEFAULT_MODEL@@|${DEFAULT_MODEL}|g" /etc/kiki/agentd.toml
+
+# OSTree state directories
+RUN mkdir -p /var/kiki/{store,state,config,apps,components}

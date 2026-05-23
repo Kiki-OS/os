@@ -1,0 +1,26 @@
+[Unit]
+Description=Kiki Agent Daemon
+Documentation=https://docs.kiki-os.com/agentd
+After=network.target local-fs.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/agentd --config /etc/kiki/agentd.toml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+# State directories live under /var/kiki (OSTree-managed)
+StateDirectory=kiki
+RuntimeDirectory=kiki
+RuntimeDirectoryPreserve=yes
+
+# Limit capabilities — agentd sandboxes tools itself
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/kiki /run/kiki
+
+[Install]
+WantedBy=multi-user.target

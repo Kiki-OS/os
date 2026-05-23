@@ -1,0 +1,24 @@
+[Unit]
+Description=Kiki Wayland Compositor
+Documentation=https://docs.kiki-os.com/compositor
+After=systemd-logind.service agentd.service
+Requires=agentd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/kiki-compositor --socket /run/kiki/wayland.sock
+Restart=on-failure
+RestartSec=3
+
+# Wayland runtime requirements
+Environment=XDG_RUNTIME_DIR=/run/user/0
+Environment=WAYLAND_DISPLAY=wayland-0
+
+RuntimeDirectory=user/0
+RuntimeDirectoryPreserve=yes
+
+# GPU access
+SupplementaryGroups=video render input
+
+[Install]
+WantedBy=graphical.target

@@ -1,0 +1,28 @@
+FROM kiki-base:latest
+
+LABEL org.opencontainers.image.title="kiki-os-desktop"
+
+# Wayland compositor + launcher + HUD
+COPY --from=ghcr.io/kiki-os/kiki-wm:latest \
+     /usr/bin/kiki-compositor \
+     /usr/bin/kiki-launcher \
+     /usr/bin/kiki-hud \
+     /usr/bin/
+
+# OOBE web server (runs only when !provisioned)
+COPY --from=ghcr.io/kiki-os/agentd-oobe:latest \
+     /usr/bin/agentd-oobe /usr/bin/agentd-oobe
+
+COPY rootfs/desktop/etc/systemd/system/ /etc/systemd/system/
+
+RUN systemctl enable kiki-compositor.service \
+ && systemctl enable agentd-oobe.service
+
+# Wayland / GPU basics
+RUN dnf install -y \
+    mesa-dri-drivers \
+    pipewire \
+    wireplumber \
+    networkmanager \
+    --setopt=install_weak_deps=False \
+ && dnf clean all

@@ -1,0 +1,15 @@
+FROM kiki-base:latest
+
+LABEL org.opencontainers.image.title="kiki-os-server"
+
+# Fleet client (phone-home to cloud control plane)
+COPY --from=ghcr.io/kiki-os/kiki-fleet:latest \
+     /usr/bin/kiki-fleet /usr/bin/kiki-fleet
+
+COPY rootfs/server/etc/systemd/system/ /etc/systemd/system/
+
+RUN systemctl enable kiki-fleet.service
+
+# cloud-init for VPS provisioning (SSH keys, user-data token)
+RUN dnf install -y cloud-init --setopt=install_weak_deps=False \
+ && dnf clean all

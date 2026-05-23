@@ -1,0 +1,28 @@
+[Unit]
+Description=Kiki Fleet Client
+Documentation=https://docs.kiki-os.com/fleet
+After=network-online.target agentd.service
+Wants=network-online.target
+Requires=agentd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/kiki-fleet --config /etc/kiki/agentd.toml
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=15
+
+# Fleet maintains a persistent TLS connection to the cloud
+RestartPreventExitStatus=2
+Environment=KIKI_FLEET_LOG=info
+
+StateDirectory=kiki
+RuntimeDirectory=kiki
+RuntimeDirectoryPreserve=yes
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/kiki /run/kiki
+
+[Install]
+WantedBy=multi-user.target

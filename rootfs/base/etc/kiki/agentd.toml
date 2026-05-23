@@ -1,0 +1,54 @@
+# Kiki OS — agentd configuration
+# Generated at image build time. Do not edit directly; use the OS builder ARGs.
+
+[inference]
+# Default model for all inference requests.
+# Overridden at build time via --build-arg DEFAULT_MODEL=<name>.
+default_model = "@@DEFAULT_MODEL@@"
+
+# Path to the `llama-server` binary (part of llama.cpp).
+llama_server_bin = "/usr/bin/llama-server"
+
+# Directory of GGUF model weights installed via the ArtifactManager.
+local_model_dir = "/var/lib/kiki/models"
+
+# How long an idle llama-server slot is kept warm before reaping.
+idle_ttl_secs = 300
+
+# Cap on concurrent llama-server processes (memory/VRAM ceiling).
+max_slots = 2
+
+# Default context window when a model manifest doesn't override it.
+context_size = 8192
+
+[router_policy]
+# Local-first: no requests leave the device unless the user opts in.
+allow_remote = false
+allow_third_party_remote = false
+default_privacy_level = "standard"
+preferred_model = "auto"
+disable_remote_below_battery_pct = 15
+disable_third_party_for_voice = true
+trace_decisions = false
+
+[control_mode]
+# Initial control mode on boot.
+# Options: bypass_permissions | agent_mode | assisted_mode | human_mode
+default = "agent_mode"
+# Allow remote clients (app/web) to switch into bypass_permissions.
+# Disable on shared or managed devices.
+allow_remote_bypass = true
+# Checkpoint interval (seconds) during bypass_permissions.
+# More aggressive than normal mode to enable quick rollback.
+bypass_checkpoint_interval_secs = 60
+
+[sockets]
+mcp     = "/run/kiki/mcp.sock"
+a11y    = "/run/kiki/a11y.sock"
+memory  = "/run/kiki/memory.sock"
+control = "/run/kiki/agentd-control.sock"
+
+[fleet]
+enabled            = true
+cloud_url          = ""   # set by fleet provisioning
+heartbeat_interval = 30

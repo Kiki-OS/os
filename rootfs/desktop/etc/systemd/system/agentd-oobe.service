@@ -1,0 +1,22 @@
+[Unit]
+Description=Kiki Out-of-Box Experience Server
+Documentation=https://docs.kiki-os.com/oobe
+After=kiki-compositor.service network.target
+# Only starts if the device has not been provisioned yet
+ConditionPathExists=!/var/kiki/provisioned
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/agentd-oobe --listen 0.0.0.0:7070
+Restart=on-failure
+RestartSec=5
+
+# Shut itself down once provisioned; agentd monitors and sets the marker
+ExecStartPost=/bin/sh -c \
+  'while [ ! -f /var/kiki/provisioned ]; do sleep 2; done; systemctl stop agentd-oobe.service'
+
+Environment=KIKI_OOBE_PORT=7070
+StateDirectory=kiki
+
+[Install]
+WantedBy=graphical.target

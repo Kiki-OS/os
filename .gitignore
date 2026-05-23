@@ -1,0 +1,19 @@
+# Local build output from make
+build/
+out/
+*.oci
+*.tar
+*.tar.gz
+
+# Secrets
+.env
+.env.local
+secrets/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
