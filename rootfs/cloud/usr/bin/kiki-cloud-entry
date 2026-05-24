@@ -1,0 +1,12 @@
+#!/bin/sh
+# Entrypoint for the cloud session container. There is no systemd here, so we
+# ensure the runtime dirs exist (/run is tmpfs, cleared per start) and then exec
+# agentd headless. Fleet connectivity + remote inference come from agentd.toml;
+# the launcher injects KIKI_FLEET_TOKEN (and cloud API keys) as env.
+set -e
+
+mkdir -p /run/kiki \
+         /var/kiki/store /var/kiki/state /var/kiki/config \
+         /var/kiki/apps /var/kiki/components
+
+exec /usr/bin/agentd --config /etc/kiki/agentd.toml --no-wm

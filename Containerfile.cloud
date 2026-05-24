@@ -1,0 +1,63 @@
+# syntax=docker/dockerfile:1
+#
+# Kiki OS — cloud session image (Cloudflare Containers).
+#
+# Runs agentd headless inside a Cloudflare Container to host an agentic session
+# migrated from a user's device (desktop / server / lite → cloud). Unlike the
+# other profiles this is NOT a bootc OS image: it's a plain OCI container — it
+# shares the host kernel, has no systemd / bootc / OSTree-A-B, and is started
+# and stopped by the cloud's CloudSessionDO. Cloudflare Containers must run on
+# linux/amd64.
+#
+#   podman build --platform linux/amd64 -f kiki-os/Containerfile.cloud \
+#     -t kiki-os-cloud:latest .
+#
+# (run from the workspace parent — the dir containing kiki-agent/, kiki-sdk/,
+# kiki-builtin/ — so the sibling repos can be COPYed. See Makefile `build-cloud`.)
+
+# ── Stage 1: build agentd + built-in apps (identical to the base image) ──────
+FROM docker.io/library/rust:1.86-slim-bookworm AS builder
+
+# native-tls (fleet WebSocket) links OpenSSL; pkg-config + libssl-dev provide it.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        pkg-config libssl-dev ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY kiki-agent   ./kiki-agent
+COPY kiki-sdk     ./kiki-sdk
+COPY kiki-builtin ./kiki-builtin
+
+RUN cargo build --release --manifest-path kiki-agent/Cargo.toml -p agentd
+RUN cargo build --release --manifest-path kiki-builtin/Cargo.toml -p kiki-calc
+
+# ── Stage 2: slim runtime (no bootc, no kernel — it's a container) ───────────
+FROM docker.io/library/debian:bookworm-slim
+
+LABEL org.opencontainers.image.title="kiki-os-cloud"
+LABEL org.opencontainers.image.source="https://github.com/Kiki-OS/os"
+
+# Runtime deps only: TLS for the fleet WebSocket, ostree to pull the session's
+# migration checkpoint. No llama-server / GGUF weights — inference is remote.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates openssl ostree \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /src/kiki-agent/target/release/agentd /usr/bin/agentd
+
+# Cloud-tuned config (remote inference, fleet on, flavor=cloud) + entrypoint.
+COPY kiki-os/rootfs/cloud/etc/kiki/agentd.toml      /etc/kiki/agentd.toml
+COPY kiki-os/rootfs/cloud/usr/bin/kiki-cloud-entry  /usr/bin/kiki-cloud-entry
+RUN chmod +x /usr/bin/kiki-cloud-entry
+
+# Built-in app artifacts (same immutable path agentd scans).
+COPY --from=builder /src/kiki-builtin/target/release/kiki-calc \
+     /usr/libexec/kiki/apps/io.kiki.calc/kiki-calc
+COPY kiki-builtin/crates/kiki-calc/kiki.toml \
+     /usr/libexec/kiki/apps/io.kiki.calc/kiki.toml
+
+# State roots (the entrypoint re-creates the tmpfs ones at runtime).
+RUN mkdir -p /var/kiki/store /var/kiki/state /var/kiki/config \
+             /var/kiki/apps /var/kiki/components /var/lib/kiki/models /run/kiki
+
+ENTRYPOINT ["/usr/bin/kiki-cloud-entry"]

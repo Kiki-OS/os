@@ -15,7 +15,7 @@ CONTEXT  := ..
 PLATFORM ?= linux/arm64
 
 .PHONY: all headless build-base build-server build-lite build-desktop \
-        qcow2 run-vm clean
+        build-cloud push-cloud qcow2 run-vm clean
 
 # Default: the headless image set.
 all: headless
@@ -48,6 +48,32 @@ build-desktop: build-base
 		-t $(REGISTRY)/kiki-os-desktop:$(VERSION) \
 		-t $(REGISTRY)/kiki-os-desktop:latest \
 		$(CONTEXT)
+
+# ── Cloud session image (Cloudflare Containers) ──────────────────────────────
+#
+# A plain OCI container (NOT bootc) that runs agentd to host a migrated agentic
+# session in the cloud. Standalone — it recompiles agentd onto a slim runtime
+# rather than extending kiki-base. Cloudflare Containers require linux/amd64, so
+# this target pins the platform regardless of the build host.
+CLOUD_PLATFORM ?= linux/amd64
+
+build-cloud:
+	podman build --platform $(CLOUD_PLATFORM) -f Containerfile.cloud \
+		-t $(REGISTRY)/kiki-os-cloud:$(VERSION) \
+		-t $(REGISTRY)/kiki-os-cloud:latest \
+		-t kiki-os-cloud:latest \
+		$(CONTEXT)
+
+# Push to the Cloudflare Registry — the registry CF Containers pulls from
+# (alongside Docker Hub / ECR; ghcr is NOT supported). The fleet worker's
+# [[containers]] block references this image ref. Requires CF_ACCOUNT_ID and a
+# logged-in wrangler.
+CF_ACCOUNT_ID ?= 329324a4ef92063153c879fd1b209669
+CLOUD_REF      = registry.cloudflare.com/$(CF_ACCOUNT_ID)/kiki-os-cloud:$(VERSION)
+
+push-cloud: build-cloud
+	podman tag kiki-os-cloud:latest $(CLOUD_REF)
+	wrangler containers push $(CLOUD_REF)
 
 # ── Bootable disk + VM ───────────────────────────────────────────────────────
 #

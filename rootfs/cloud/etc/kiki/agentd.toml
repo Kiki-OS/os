@@ -1,0 +1,54 @@
+# Kiki OS — agentd configuration (cloud session container).
+#
+# Runs agentd headless inside a Cloudflare Container to host an agentic session
+# migrated from a user's device (desktop / server / lite → cloud). Inference is
+# remote (the container has no GPU); the session's state is pulled from its
+# OSTree checkpoint and mirrored back over the fleet relay. This is NOT a bootc
+# OS image — see Containerfile.cloud.
+
+[inference]
+# No local GPU here: the local model name is only a schema fallback. With
+# allow_remote = true the router selects the preferred remote model instead, so
+# llama-server is never spawned and no GGUF weights are shipped.
+default_model   = "granite4.1:3b"
+# Post-session memory consolidation (the Dreamer) also runs remotely here — a
+# cheap cloud model, not the local default, since there's no llama-server.
+distill_model   = "claude-haiku-4-5"
+local_model_dir = "/var/lib/kiki/models"
+
+[router_policy]
+# Remote inference is the whole point of the cloud session.
+allow_remote                     = true
+allow_third_party_remote         = true
+default_privacy_level            = "standard"
+preferred_model                  = "claude-sonnet-4-5"  # ANTHROPIC_API_KEY injected by the launcher
+disable_remote_below_battery_pct = 0
+disable_third_party_for_voice    = false
+trace_decisions                  = false
+
+[control_mode]
+# A migrated session runs unattended: agent_mode drives without blocking on
+# approvals (destructive actions are logged, not gated). The session's own mode
+# is restored from the migration bundle once resume-from-bundle is wired.
+default                         = "agent_mode"
+allow_remote_bypass             = true
+bypass_checkpoint_interval_secs = 60
+
+[sockets]
+mcp     = "/run/kiki/mcp.sock"
+a11y    = "/run/kiki/a11y.sock"
+memory  = "/run/kiki/memory.sock"
+control = "/run/kiki/agentd-control.sock"
+
+[fleet]
+# Connect back to our cloud relay. The per-session enrollment token is injected
+# as KIKI_FLEET_TOKEN by the CloudSessionDO that launches this container.
+enabled            = true
+cloud_url          = "https://fleet.kiki-os.com"
+auth_url           = ""        # derived from cloud_url (fleet. → auth.) when empty
+flavor             = "cloud"
+heartbeat_interval = 30
+
+[apps]
+# Built-in app artifacts baked into the image; agentd scans this on start.
+dir = "/usr/libexec/kiki/apps"
