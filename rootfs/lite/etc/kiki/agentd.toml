@@ -3,7 +3,7 @@
 
 [inference]
 default_model    = "@@DEFAULT_MODEL@@"
-llama_server_bin = "/usr/bin/llama-server"
+llama_server_bin = "/usr/libexec/kiki/llama/llama-server"
 local_model_dir  = "/var/lib/kiki/models"
 # Sensor-class device: keep one model warm, short TTL, smaller context.
 idle_ttl_secs    = 120

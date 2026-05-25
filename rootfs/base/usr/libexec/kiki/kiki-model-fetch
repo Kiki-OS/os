@@ -1,0 +1,38 @@
+#!/bin/sh
+# kiki-model-fetch — fetch the default model GGUF on first boot.
+#
+# Netinst philosophy: model WEIGHTS are never baked into the image (they are
+# GBs). The image ships lean; the weights are pulled at runtime by this oneshot.
+# Idempotent (skips if present) and graceful (no-op when no URL is configured),
+# so a fresh device always boots — a model can also be provisioned later via
+# kpkg / fleet / OOBE.
+#
+# Reads KIKI_MODEL_ID + KIKI_MODEL_URL from /etc/kiki/model.env (baked from the
+# image build args DEFAULT_MODEL / DEFAULT_MODEL_URL).
+
+set -eu
+
+MODEL_DIR=/var/lib/kiki/models
+ID="${KIKI_MODEL_ID:-}"
+URL="${KIKI_MODEL_URL:-}"
+
+if [ -z "$URL" ] || [ -z "$ID" ]; then
+    echo "kiki-model-fetch: no model configured (KIKI_MODEL_URL empty) — skipping"
+    exit 0
+fi
+
+# Match agentd's StaticDirResolver sanitisation: [^A-Za-z0-9._-] -> '_'
+SAFE=$(printf '%s' "$ID" | sed 's/[^A-Za-z0-9._-]/_/g')
+DEST="$MODEL_DIR/$SAFE.gguf"
+
+if [ -s "$DEST" ]; then
+    echo "kiki-model-fetch: $DEST already present — skipping"
+    exit 0
+fi
+
+mkdir -p "$MODEL_DIR"
+TMP="$DEST.partial"
+echo "kiki-model-fetch: downloading model '$ID' from $URL"
+curl -fSL --retry 5 --retry-delay 5 --retry-all-errors -o "$TMP" "$URL"
+mv "$TMP" "$DEST"
+echo "kiki-model-fetch: installed $DEST"

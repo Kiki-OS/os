@@ -6,8 +6,9 @@
 # Overridden at build time via --build-arg DEFAULT_MODEL=<name>.
 default_model = "@@DEFAULT_MODEL@@"
 
-# Path to the `llama-server` binary (part of llama.cpp).
-llama_server_bin = "/usr/bin/llama-server"
+# Path to the `llama-server` binary (part of llama.cpp). Installed under
+# /usr/libexec (binary + its .so siblings); /usr/bin/llama-server symlinks here.
+llama_server_bin = "/usr/libexec/kiki/llama/llama-server"
 
 # Directory of GGUF model weights installed via the ArtifactManager.
 local_model_dir = "/var/lib/kiki/models"

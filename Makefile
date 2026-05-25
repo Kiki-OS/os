@@ -6,7 +6,7 @@
 # `make` from this directory (kiki-os/).
 #
 # Headless targets (base/server/lite) are the supported path today. `desktop`
-# additionally needs the Wayland compositor (kiki-wm) and OOBE, which are not
+# additionally needs the Wayland compositor (kiki-de) and OOBE, which are not
 # built yet — it is kept for reference but excluded from `all`.
 
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -15,7 +15,8 @@ CONTEXT  := ..
 PLATFORM ?= linux/arm64
 
 .PHONY: all headless build-base build-server build-lite build-desktop \
-        build-cloud push-cloud qcow2 run-vm clean
+        build-cloud push-cloud qcow2 run-vm clean \
+        push push-base push-server push-lite
 
 # Default: the headless image set.
 all: headless
@@ -42,7 +43,7 @@ build-lite: build-base
 		-t kiki-lite:latest \
 		$(CONTEXT)
 
-# Requires the compositor (kiki-wm) + OOBE images — not built yet.
+# Requires the compositor (kiki-de) + OOBE images — not built yet.
 build-desktop: build-base
 	podman build --platform $(PLATFORM) -f Containerfile.desktop \
 		-t $(REGISTRY)/kiki-os-desktop:$(VERSION) \
@@ -102,3 +103,21 @@ run-vm:
 
 clean:
 	rm -rf dist/
+
+# ── Registry push ─────────────────────────────────────────────────────────────
+#
+# Push built OS images to the registry (GHCR by default). Requires a prior
+# `podman login ghcr.io`. CI does this automatically (.github/workflows/build.yml).
+push: push-base push-server push-lite
+
+push-base:
+	podman push $(REGISTRY)/kiki-os-base:$(VERSION)
+	podman push $(REGISTRY)/kiki-os-base:latest
+
+push-server:
+	podman push $(REGISTRY)/kiki-os-server:$(VERSION)
+	podman push $(REGISTRY)/kiki-os-server:latest
+
+push-lite:
+	podman push $(REGISTRY)/kiki-os-lite:$(VERSION)
+	podman push $(REGISTRY)/kiki-os-lite:latest

@@ -1,12 +1,14 @@
 [Unit]
-Description=Kiki Wayland Compositor
-Documentation=https://docs.kiki-os.com/compositor
+Description=Kiki Desktop Environment
+Documentation=https://docs.kiki-os.com/de
 After=systemd-logind.service agentd.service
 Requires=agentd.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/kiki-compositor --socket /run/kiki/wayland.sock
+# The DE daemon: runs the shell logic and brings up the Wayland compositor when
+# a display is present.
+ExecStart=/usr/bin/kiki-ded --socket /run/kiki/wayland.sock
 Restart=on-failure
 RestartSec=3
 

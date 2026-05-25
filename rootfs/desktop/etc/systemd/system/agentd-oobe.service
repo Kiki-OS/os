@@ -1,7 +1,7 @@
 [Unit]
 Description=Kiki Out-of-Box Experience Server
 Documentation=https://docs.kiki-os.com/oobe
-After=kiki-compositor.service network.target
+After=kiki-ded.service network.target
 # Only starts if the device has not been provisioned yet
 ConditionPathExists=!/var/kiki/provisioned
 

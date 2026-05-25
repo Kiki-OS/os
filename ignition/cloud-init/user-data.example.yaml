@@ -1,0 +1,38 @@
+#cloud-config
+# Kiki OS server-node provisioning (cloud-init user-data). EXAMPLE — adjust the
+# SSH key, fleet endpoint/token, and model URL for your deployment.
+#
+# The server image has cloud-init enabled. agentd reads KIKI_FLEET_URL /
+# KIKI_FLEET_TOKEN from the environment; kiki-model-fetch reads KIKI_MODEL_ID /
+# KIKI_MODEL_URL. So provisioning is just an env drop-in + model.env.
+
+users:
+  - name: kiki
+    groups: [wheel]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAREPLACE_WITH_YOUR_PUBLIC_KEY
+
+write_files:
+  # Point agentd at the fleet control plane. KIKI_FLEET_TOKEN is the enrollment
+  # bearer (from the fleet UI / device-flow); omit it to enroll interactively.
+  - path: /etc/systemd/system/agentd.service.d/20-provisioning.conf
+    permissions: "0644"
+    content: |
+      [Service]
+      Environment=KIKI_FLEET_URL=https://fleet.kiki-os.com
+      Environment=KIKI_FLEET_TOKEN=REPLACE_WITH_ENROLLMENT_TOKEN
+
+  # Model fetched on first boot. Example uses a small tool-calling model verified
+  # to work with the baked llama-server; for a stronger default use granite, e.g.
+  #   KIKI_MODEL_ID=granite-4.0-micro
+  #   KIKI_MODEL_URL=https://huggingface.co/ibm-granite/granite-4.0-micro-GGUF/resolve/main/granite-4.0-micro-Q4_K_M.gguf
+  - path: /etc/kiki/model.env
+    permissions: "0644"
+    content: |
+      KIKI_MODEL_ID=qwen2.5:0.5b
+      KIKI_MODEL_URL=https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl restart kiki-model-fetch.service agentd.service

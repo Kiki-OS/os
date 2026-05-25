@@ -1,0 +1,7 @@
+# bootc-image-builder customization for LOCAL validation only.
+# Adds a login user so the qcow2 can be reached on the serial console / SSH.
+# Production provisioning uses cloud-init/ignition, not this file.
+[[customizations.user]]
+name     = "kiki"
+password = "kiki"
+groups   = ["wheel"]

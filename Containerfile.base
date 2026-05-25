@@ -24,11 +24,11 @@ COPY kiki-agent   ./kiki-agent
 COPY kiki-sdk     ./kiki-sdk
 COPY kiki-builtin ./kiki-builtin
 
-# The OS daemon.
-RUN cargo build --release --manifest-path kiki-agent/Cargo.toml -p agentd
+# The OS daemon + the device-side package manager (kpkg installs L2 artifacts).
+RUN cargo build --release --manifest-path kiki-agent/Cargo.toml -p agentd -p kiki-pkg -p memoryd
 
 # Built-in apps (headless MCP tool servers).
-RUN cargo build --release --manifest-path kiki-builtin/Cargo.toml -p kiki-calc
+RUN cargo build --release --manifest-path kiki-builtin/Cargo.toml -p kiki-calc -p kiki-notes -p kiki-tasks -p kiki-settings
 
 # ── Stage 2: assemble the bootc OS image ─────────────────────────────────────
 FROM quay.io/fedora/fedora-bootc:42
@@ -39,15 +39,29 @@ LABEL org.opencontainers.image.source="https://github.com/Kiki-OS/os"
 # Default local model — override at build time:
 #   podman build --build-arg DEFAULT_MODEL=llama3.2:3b ...
 ARG DEFAULT_MODEL=granite4.1:3b
+# GGUF weights URL fetched on first boot (netinst — weights are not baked).
+# Empty by default: a fresh image boots and a model is provisioned later
+# (kpkg / fleet / OOBE). Set at build time to pre-wire a default:
+#   podman build --build-arg DEFAULT_MODEL_URL=https://…/model.gguf ...
+ARG DEFAULT_MODEL_URL=""
 
-# Core daemon.
+# Core daemon + package manager + memory daemon.
 COPY --from=builder /src/kiki-agent/target/release/agentd /usr/bin/agentd
+COPY --from=builder /src/kiki-agent/target/release/kpkg /usr/bin/kpkg
+COPY --from=builder /src/kiki-agent/target/release/memoryd /usr/bin/memoryd
 
-# Systemd unit + agentd config (substitute the build-arg model into the template).
+# Registry root-of-trust: ed25519 public keys kpkg verifies artifact signatures
+# against (deny-by-default). Baked into the immutable image so a device trusts
+# the registry without any trust-on-first-use over the wire.
+COPY kiki-os/rootfs/base/etc/kiki/trust/ /etc/kiki/trust/
+
+# Systemd units + agentd config (substitute the build-arg model into the template).
 COPY kiki-os/rootfs/base/etc/systemd/system/agentd.service /etc/systemd/system/agentd.service
+COPY kiki-os/rootfs/base/etc/systemd/system/memoryd.service /etc/systemd/system/memoryd.service
 COPY kiki-os/rootfs/base/etc/kiki/agentd.toml /etc/kiki/agentd.toml
 RUN sed -i "s|@@DEFAULT_MODEL@@|${DEFAULT_MODEL}|g" /etc/kiki/agentd.toml \
- && systemctl enable agentd.service
+ && systemctl enable agentd.service \
+ && systemctl enable memoryd.service
 
 # Built-in app artifacts live under immutable /usr (bootc resets /var per
 # machine, so /var/kiki/apps can't carry image content). agentd's loader scans
@@ -56,7 +70,42 @@ COPY --from=builder /src/kiki-builtin/target/release/kiki-calc \
      /usr/libexec/kiki/apps/io.kiki.calc/kiki-calc
 COPY kiki-builtin/crates/kiki-calc/kiki.toml \
      /usr/libexec/kiki/apps/io.kiki.calc/kiki.toml
+COPY --from=builder /src/kiki-builtin/target/release/kiki-notes \
+     /usr/libexec/kiki/apps/io.kiki.notes/kiki-notes
+COPY kiki-builtin/crates/kiki-notes/kiki.toml \
+     /usr/libexec/kiki/apps/io.kiki.notes/kiki.toml
+COPY --from=builder /src/kiki-builtin/target/release/kiki-tasks \
+     /usr/libexec/kiki/apps/io.kiki.tasks/kiki-tasks
+COPY kiki-builtin/crates/kiki-tasks/kiki.toml \
+     /usr/libexec/kiki/apps/io.kiki.tasks/kiki.toml
+COPY --from=builder /src/kiki-builtin/target/release/kiki-settings \
+     /usr/libexec/kiki/apps/io.kiki.settings/kiki-settings
+COPY kiki-builtin/crates/kiki-settings/kiki.toml \
+     /usr/libexec/kiki/apps/io.kiki.settings/kiki.toml
+
+# Local inference runtime: llama.cpp `llama-server` (precompiled, multi-arch).
+# Lightweight (~30MB): the binary plus its libggml/libllama shared objects. The
+# binary is dynamically linked and resolves those siblings via $ORIGIN, so the
+# whole dir lives together under /usr/libexec. Model WEIGHTS are NOT baked — they
+# are fetched on first boot (kiki-model-fetch.service), keeping the image
+# netinst-lean. A /usr/bin symlink is provided for convenience.
+# TODO(repro): pin to an immutable digest/version tag for production builds.
+COPY --from=ghcr.io/ggml-org/llama.cpp:server /app /usr/libexec/kiki/llama/
+# The binary has no $ORIGIN rpath (upstream relies on LD_LIBRARY_PATH=/app), so
+# register its lib dir with the dynamic loader and a /usr/bin symlink.
+RUN echo /usr/libexec/kiki/llama > /etc/ld.so.conf.d/kiki-llama.conf \
+ && ldconfig \
+ && ln -sf /usr/libexec/kiki/llama/llama-server /usr/bin/llama-server
+
+# First-boot model fetch (netinst): the oneshot downloads the GGUF weights to
+# /var/lib/kiki/models before agentd starts. model.env carries the id + url.
+COPY kiki-os/rootfs/base/usr/libexec/kiki/kiki-model-fetch /usr/libexec/kiki/kiki-model-fetch
+COPY kiki-os/rootfs/base/etc/systemd/system/kiki-model-fetch.service /etc/systemd/system/kiki-model-fetch.service
+RUN printf 'KIKI_MODEL_ID=%s\nKIKI_MODEL_URL=%s\n' "${DEFAULT_MODEL}" "${DEFAULT_MODEL_URL}" > /etc/kiki/model.env \
+ && chmod +x /usr/libexec/kiki/kiki-model-fetch \
+ && systemctl enable kiki-model-fetch.service
 
 # Machine-local state roots (created on first boot under the mutable /var).
 RUN mkdir -p /var/kiki/store /var/kiki/state /var/kiki/config \
-             /var/kiki/apps /var/kiki/components /var/lib/kiki/models
+             /var/kiki/apps /var/kiki/apps-data /var/kiki/components /var/kiki/secrets \
+             /var/lib/kiki/models

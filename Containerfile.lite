@@ -14,7 +14,9 @@ FROM kiki-base:latest
 LABEL org.opencontainers.image.title="kiki-os-lite"
 
 ARG DEFAULT_MODEL=granite4.1:1b
+ARG DEFAULT_MODEL_URL=""
 COPY kiki-os/rootfs/lite/etc/kiki/agentd.toml /etc/kiki/agentd.toml
 RUN sed -i "s|@@DEFAULT_MODEL@@|${DEFAULT_MODEL}|g" /etc/kiki/agentd.toml \
+ && printf 'KIKI_MODEL_ID=%s\nKIKI_MODEL_URL=%s\n' "${DEFAULT_MODEL}" "${DEFAULT_MODEL_URL}" > /etc/kiki/model.env \
  && dnf remove -y NetworkManager-wifi --setopt=install_weak_deps=False \
  && dnf clean all

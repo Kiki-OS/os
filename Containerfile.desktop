@@ -2,11 +2,11 @@ FROM kiki-base:latest
 
 LABEL org.opencontainers.image.title="kiki-os-desktop"
 
-# Wayland compositor + launcher + HUD
-COPY --from=ghcr.io/kiki-os/kiki-wm:latest \
-     /usr/bin/kiki-compositor \
-     /usr/bin/kiki-launcher \
-     /usr/bin/kiki-hud \
+# The DE daemon (kiki-ded): sessions/launcher/prompt/HUD + the Wayland compositor
+# when a display is present. Single binary — the rest of the DE (shell-core,
+# session, launcher, hud, compositor) are libraries linked into it.
+COPY --from=ghcr.io/kiki-os/kiki-de:latest \
+     /usr/bin/kiki-ded \
      /usr/bin/
 
 # OOBE web server (runs only when !provisioned)
@@ -15,7 +15,7 @@ COPY --from=ghcr.io/kiki-os/agentd-oobe:latest \
 
 COPY rootfs/desktop/etc/systemd/system/ /etc/systemd/system/
 
-RUN systemctl enable kiki-compositor.service \
+RUN systemctl enable kiki-ded.service \
  && systemctl enable agentd-oobe.service
 
 # Wayland / GPU basics

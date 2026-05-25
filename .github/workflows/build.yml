@@ -1,0 +1,80 @@
+name: build-images
+
+# Builds the headless Kiki OS images (base/server/lite) from source and pushes
+# them to GHCR. The image build compiles agentd + built-in apps from the sibling
+# repos, so this workflow checks them out alongside kiki-os and uses the
+# workspace parent as the build context (mirrors the local layout).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io/kiki-os
+
+jobs:
+  build:
+    # Native arm64 runner — no QEMU emulation, so the Rust release build is fast.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout kiki-os
+        uses: actions/checkout@v4
+        with:
+          path: kiki-os
+
+      - name: Checkout sibling repos
+        uses: actions/checkout@v4
+        with:
+          repository: Kiki-OS/agent
+          path: kiki-agent
+      - uses: actions/checkout@v4
+        with:
+          repository: Kiki-OS/sdk
+          path: kiki-sdk
+      - uses: actions/checkout@v4
+        with:
+          repository: Kiki-OS/builtin
+          path: kiki-builtin
+
+      - name: Install podman
+        run: sudo apt-get update && sudo apt-get install -y podman
+
+      # Keep the build context lean (the .containerignore lives at the workspace
+      # parent, which is not part of any repo).
+      - name: Write .containerignore
+        run: |
+          cat > "$GITHUB_WORKSPACE/.containerignore" <<'EOF'
+          kiki-cloud
+          kiki-app
+          kiki-apps
+          kiki-models
+          kiki-de
+          spec
+          **/target
+          **/node_modules
+          **/dist
+          **/.git
+          **/.DS_Store
+          **/*.log
+          EOF
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ github.token }}
+        run: echo "$GHCR_TOKEN" | podman login ghcr.io -u "$GHCR_USER" --password-stdin
+
+      - name: Build headless images
+        working-directory: kiki-os
+        run: make headless PLATFORM=linux/arm64
+
+      - name: Push to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: kiki-os
+        run: make push

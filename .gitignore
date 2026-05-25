@@ -1,9 +1,13 @@
 # Local build output from make
 build/
 out/
+dist/
 *.oci
 *.tar
 *.tar.gz
+*.qcow2
+*.gguf
+*.fd
 
 # Secrets
 .env

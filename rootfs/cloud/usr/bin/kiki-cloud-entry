@@ -9,4 +9,4 @@ mkdir -p /run/kiki \
          /var/kiki/store /var/kiki/state /var/kiki/config \
          /var/kiki/apps /var/kiki/components
 
-exec /usr/bin/agentd --config /etc/kiki/agentd.toml --no-wm
+exec /usr/bin/agentd --config /etc/kiki/agentd.toml --no-de

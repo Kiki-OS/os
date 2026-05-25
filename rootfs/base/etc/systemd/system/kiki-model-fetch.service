@@ -1,0 +1,20 @@
+[Unit]
+Description=Kiki first-boot model fetch (downloads the default GGUF weights)
+Documentation=https://docs.kiki-os.com/agentd
+After=network-online.target
+Wants=network-online.target
+# Run before the agent so the first inference has its weights. No-op on later
+# boots (weights already present).
+Before=agentd.service
+ConditionPathExists=/etc/kiki/model.env
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/kiki/model.env
+ExecStart=/usr/libexec/kiki/kiki-model-fetch
+# Weights live under the mutable /var.
+StateDirectory=kiki
+
+[Install]
+WantedBy=multi-user.target

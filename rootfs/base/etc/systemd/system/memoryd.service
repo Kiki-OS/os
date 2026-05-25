@@ -1,0 +1,30 @@
+[Unit]
+Description=Kiki Memory Daemon
+Documentation=https://docs.kiki-os.com/memory
+After=local-fs.target
+Before=agentd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/memoryd
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+Environment=KIKI_MEMORY_DIR=/var/kiki/memory
+Environment=KIKI_MEMORY_SOCKET=/run/kiki/memory.sock
+
+# Durable memory lives under /var/kiki (OSTree-managed); the socket under /run/kiki.
+StateDirectory=kiki
+RuntimeDirectory=kiki
+RuntimeDirectoryPreserve=yes
+
+# On-device only — no network. Memory is private to the device.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateNetwork=yes
+ReadWritePaths=/var/kiki /run/kiki
+
+[Install]
+WantedBy=multi-user.target

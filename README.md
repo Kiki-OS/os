@@ -57,7 +57,7 @@ ignition/                ← provisioning configs
 ## Architecture layers
 
 ```
-L10  Compositor + UI       (Wayland / kiki-wm)
+L10  Compositor + UI       (Wayland / kiki-de)
 L9   Agent harness         (agentd)
 L8   Apps                  (sandboxed, capability-gated)
 L7   Memory subsystem      (episodic / semantic / procedural / identity)
@@ -95,7 +95,7 @@ podman build --build-arg DEFAULT_MODEL=llama3.2:3b -f Containerfile.base .
 | Repo | Description |
 |---|---|
 | [agent](https://github.com/Kiki-OS/agent) | `agentd` — the central privileged daemon |
-| [wm](https://github.com/Kiki-OS/wm) | Wayland compositor and desktop environment |
+| [de](https://github.com/Kiki-OS/de) | The desktop environment — full experience layer over the headless agentic core (graphics optional) |
 | [sdk](https://github.com/Kiki-OS/sdk) | Developer SDK for building Kiki apps |
 | [app](https://github.com/Kiki-OS/app) | Companion mobile app |
 | [cloud](https://github.com/Kiki-OS/cloud) | Optional cloud backend (fleet, OTA, AI gateway) |
