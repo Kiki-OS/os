@@ -70,6 +70,14 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: echo "$GHCR_TOKEN" | podman login ghcr.io -u "$GHCR_USER" --password-stdin
 
+      - name: Validate Containerfiles
+        working-directory: kiki-os
+        run: |
+          for f in Containerfile.*; do
+            grep -q "^FROM" "$f" || (echo "ERROR: $f has no FROM line" && exit 1)
+          done
+          echo "All Containerfiles valid"
+
       - name: Build headless images
         working-directory: kiki-os
         run: make headless PLATFORM=linux/arm64

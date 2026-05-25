@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+#
+# Kiki OS — netinst image (minimal, no bundled model).
+#
+# Extends the base image but strips out llama.cpp and any pre-installed model
+# weights. On first boot, kiki-oobe.service pulls the default model and default
+# L2 apps from kiki-cloud via kpkg. Result is ~500 MB smaller than kiki-server.
+#
+#   podman build -f kiki-os/Containerfile.netinst -t kiki-netinst:latest .
+#
+# (run from the workspace parent; requires kiki-base:latest built first).
+
+FROM kiki-base:latest
+
+LABEL org.opencontainers.image.title="kiki-os-netinst"
+LABEL org.opencontainers.image.source="https://github.com/Kiki-OS/os"
+
+# Remove llama.cpp runtime (weights are never baked in base, but the server
+# binary + shared libs are; strip them to keep this image lean).
+RUN rm -rf /usr/libexec/kiki/llama /usr/bin/llama-server \
+ && rm -f /etc/ld.so.conf.d/kiki-llama.conf \
+ && ldconfig
+
+# Overlay netinst-specific files (OOBE runner + systemd unit).
+COPY kiki-os/rootfs/netinst/ /
+
+# Mark the OOBE runner executable and enable the unit.
+RUN chmod +x /usr/libexec/kiki/kiki-oobe-runner \
+ && systemctl enable kiki-oobe.service

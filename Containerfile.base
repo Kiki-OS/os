@@ -105,6 +105,16 @@ RUN printf 'KIKI_MODEL_ID=%s\nKIKI_MODEL_URL=%s\n' "${DEFAULT_MODEL}" "${DEFAULT
  && chmod +x /usr/libexec/kiki/kiki-model-fetch \
  && systemctl enable kiki-model-fetch.service
 
+# OTA recovery: greenboot gates each boot on a health check and triggers an
+# automatic `bootc rollback` after repeated failed boots — so a bad OTA that
+# can't bring the agent up self-heals to the last known-good deployment.
+RUN dnf -y install greenboot greenboot-default-health-checks \
+ && dnf clean all
+COPY kiki-os/rootfs/base/usr/lib/greenboot/check/required.d/10-kiki-health.sh \
+     /usr/lib/greenboot/check/required.d/10-kiki-health.sh
+RUN chmod +x /usr/lib/greenboot/check/required.d/10-kiki-health.sh \
+ && systemctl enable greenboot-healthcheck.service
+
 # Machine-local state roots (created on first boot under the mutable /var).
 RUN mkdir -p /var/kiki/store /var/kiki/state /var/kiki/config \
              /var/kiki/apps /var/kiki/apps-data /var/kiki/components /var/kiki/secrets \

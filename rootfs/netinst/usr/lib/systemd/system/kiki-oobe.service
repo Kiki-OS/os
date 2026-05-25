@@ -1,0 +1,17 @@
+[Unit]
+Description=Kiki OOBE — first-boot model + app provisioning
+ConditionPathExists=!/var/kiki/.oobe-complete
+After=network-online.target agentd.service
+Requires=agentd.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/kiki/kiki-oobe-runner
+ExecStartPost=/bin/touch /var/kiki/.oobe-complete
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

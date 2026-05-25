@@ -14,13 +14,13 @@ REGISTRY ?= ghcr.io/kiki-os
 CONTEXT  := ..
 PLATFORM ?= linux/arm64
 
-.PHONY: all headless build-base build-server build-lite build-desktop \
+.PHONY: all headless build-base build-server build-lite build-netinst build-desktop \
         build-cloud push-cloud qcow2 run-vm clean \
-        push push-base push-server push-lite
+        push push-base push-server push-lite push-netinst
 
 # Default: the headless image set.
 all: headless
-headless: build-server build-lite
+headless: build-server build-lite build-netinst
 
 build-base:
 	podman build --platform $(PLATFORM) -f Containerfile.base \
@@ -41,6 +41,13 @@ build-lite: build-base
 		-t $(REGISTRY)/kiki-os-lite:$(VERSION) \
 		-t $(REGISTRY)/kiki-os-lite:latest \
 		-t kiki-lite:latest \
+		$(CONTEXT)
+
+build-netinst: build-base
+	podman build --platform $(PLATFORM) -f Containerfile.netinst \
+		-t $(REGISTRY)/kiki-os-netinst:$(VERSION) \
+		-t $(REGISTRY)/kiki-os-netinst:latest \
+		-t kiki-netinst:latest \
 		$(CONTEXT)
 
 # Requires the compositor (kiki-de) + OOBE images — not built yet.
@@ -108,7 +115,7 @@ clean:
 #
 # Push built OS images to the registry (GHCR by default). Requires a prior
 # `podman login ghcr.io`. CI does this automatically (.github/workflows/build.yml).
-push: push-base push-server push-lite
+push: push-base push-server push-lite push-netinst
 
 push-base:
 	podman push $(REGISTRY)/kiki-os-base:$(VERSION)
@@ -121,3 +128,7 @@ push-server:
 push-lite:
 	podman push $(REGISTRY)/kiki-os-lite:$(VERSION)
 	podman push $(REGISTRY)/kiki-os-lite:latest
+
+push-netinst:
+	podman push $(REGISTRY)/kiki-os-netinst:$(VERSION)
+	podman push $(REGISTRY)/kiki-os-netinst:latest

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Wait for agentd to be ready (MCP socket up).
+timeout 60 bash -c 'until [ -S /run/kiki/mcp.sock ]; do sleep 2; done'
+
+# Pull default model (Granite 3.2 2B Q4) from kiki-cloud registry.
+if command -v kpkg &>/dev/null; then
+    kpkg install io.kiki.models.granite-3.2-2b@latest || true
+fi
+
+# Install default L2 apps.
+for app in io.kiki.notes io.kiki.tasks io.kiki.weather; do
+    kpkg install "${app}@latest" || true
+done
